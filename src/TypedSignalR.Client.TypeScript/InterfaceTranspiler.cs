@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
@@ -23,7 +24,7 @@ internal class InterfaceTranspiler
     public IReadOnlyList<GeneratedSourceCode> Transpile(IEnumerable<INamedTypeSymbol> interfaceTypes)
     {
         var typeLookup = interfaceTypes.Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default)
-            .ToLookup<INamedTypeSymbol, INamespaceSymbol>(static x => x.ContainingNamespace, SymbolEqualityComparer.Default);
+                                       .ToLookup<INamedTypeSymbol, INamespaceSymbol>(static x => x.ContainingNamespace, SymbolEqualityComparer.Default);
 
         var outputSourceCodeList = new List<GeneratedSourceCode>(typeLookup.Count);
 
@@ -33,7 +34,11 @@ internal class InterfaceTranspiler
 
             AddHeader(group, ref codeWriter);
 
-            foreach (var type in group)
+            var allTypes = group.Concat(group.SelectMany(static i => i.AllInterfaces))
+                .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default)
+                .ToArray();
+
+            foreach (var type in allTypes)
             {
                 _logger.Log(LogLevel.Information, "Transpile {typename}...", type.ToDisplayString());
 
@@ -69,7 +74,8 @@ internal class InterfaceTranspiler
         codeWriter.AppendLine($"/* eslint-disable */");
         codeWriter.AppendLine($"/* tslint:disable */");
 
-        var appearTypes = interfaceTypes.SelectMany(static x => x.GetMethods())
+        var appearTypes = interfaceTypes.Concat(interfaceTypes.SelectMany(static x => x.AllInterfaces))
+            .SelectMany(static x => x.GetMethods())
             .SelectMany(static x => x.Parameters.Select(static y => y.Type).Concat(new[] { GetReturnType(x) }));
 
         var tapperAttributeAnnotatedTypesLookup = appearTypes
@@ -93,7 +99,8 @@ internal class InterfaceTranspiler
 
     private static void AddInterface(INamedTypeSymbol interfaceSymbol, SpecialSymbols specialSymbols, ITranspilationOptions options, ref CodeWriter codeWriter)
     {
-        codeWriter.AppendLine($"export type {interfaceSymbol.Name} = {{");
+        var baseInterfaces = interfaceSymbol.AllInterfaces.Length == 0 ? "" : $" extends {string.Join(", ", interfaceSymbol.AllInterfaces.Select(i => i.Name))}";
+        codeWriter.AppendLine($"export interface {interfaceSymbol.Name}{baseInterfaces} {{");
 
         foreach (var method in interfaceSymbol.GetMethods())
         {

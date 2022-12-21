@@ -12,6 +12,6 @@ internal class TypeMetadata
     public TypeMetadata(INamedTypeSymbol namedTypeSymbol)
     {
         Name = namedTypeSymbol.Name;
-        Methods = namedTypeSymbol.GetMethods().ToArray();
+        Methods = namedTypeSymbol.GetMethods().Concat(namedTypeSymbol.AllInterfaces.SelectMany(static i => i.GetMethods())).ToArray();
     }
 }
